@@ -9,7 +9,7 @@ CREATE TABLE message_sentiments (
     document_emotion_fear double precision NOT NULL,
     document_emotion_disgust double precision NOT NULL,
     document_emotion_anger double precision NOT NULL,
-    created_at timestamp without time zone DEFAULT now(),
+    created_at timestamp without time zone DEFAULT now()
 );
 
 CREATE INDEX idx_discord_id ON message_sentiments(discord_id);
