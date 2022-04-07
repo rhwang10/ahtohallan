@@ -37,7 +37,9 @@ def get_db():
 
 @app.post("/sentiment")
 async def createSentiment(sentimentCreate: MessageSentimentCreate,
-                          db: Session = Depends(get_db)):
+                          persist: bool = False,
+                          db: Session = Depends(get_db),
+                          response_model=MessageSentiment):
 
     urlsReplaced = urls.transform(sentimentCreate.content).strip()
 
@@ -46,11 +48,11 @@ async def createSentiment(sentimentCreate: MessageSentimentCreate,
 
     sentimentReplaced = emojis.transform(urlsReplaced)
 
-    watsonResp = await watson.getSentiment(sentimentCreate.content)
+    watsonResp = await watson.getSentiment(sentimentReplaced)
 
     messageSentiment = MessageSentiment(
         discord_id=sentimentCreate.discord_id,
-        content=urlsReplaced,
+        content=sentimentCreate.content,
         document_sentiment=watsonResp["sentiment"]["document"]["score"],
         document_sentiment_label=watsonResp["sentiment"]["document"]["label"],
         document_emotion_sadness=watsonResp["emotion"]["document"]["emotion"]["sadness"],
@@ -60,6 +62,7 @@ async def createSentiment(sentimentCreate: MessageSentimentCreate,
         document_emotion_anger=watsonResp["emotion"]["document"]["emotion"]["anger"]
     )
 
-    insertMessageSentiment(db, messageSentiment)
+    if persist:
+        insertMessageSentiment(db, messageSentiment)
 
-    return Response(json.dumps({"status": "success"}), status_code=HTTP_200_OK)
+    return messageSentiment
