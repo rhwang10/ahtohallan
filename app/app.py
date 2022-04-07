@@ -6,6 +6,9 @@ from starlette.status import HTTP_200_OK, HTTP_404_NOT_FOUND, HTTP_400_BAD_REQUE
 
 import functools
 import os
+import json
+
+# Requests
 from requests.auth import HTTPBasicAuth
 
 # SQLAlchemy
@@ -16,9 +19,13 @@ from app.db.session import SessionLocal, engine
 from app.schemas.sentiment import MessageSentimentCreate, MessageSentiment
 from app.services.watson import WatsonNLUService
 from app.sql.message_sentiments import insertMessageSentiment
+from app.transformers.emojis import EmojiTransformer
+from app.transformers.urls import UrlTransformer
 
 app = FastAPI()
 watson = WatsonNLUService()
+emojis = EmojiTransformer()
+urls = UrlTransformer()
 
 def get_db():
     db = SessionLocal()
@@ -28,23 +35,22 @@ def get_db():
     finally:
         db.close()
 
-def _asyncCallable(func, endpoint, data, headers, params=None):
-
-    auth = HTTPBasicAuth("apikey", os.environ.get("IBM_NLU_API_KEY"))
-
-    return functools.partial(
-        func, endpoint, data=data, params=params, headers=headers, auth=auth
-    )
-
 @app.post("/sentiment")
 async def createSentiment(sentimentCreate: MessageSentimentCreate,
                           db: Session = Depends(get_db)):
+
+    urlsReplaced = urls.transform(sentimentCreate.content).strip()
+
+    if not urlsReplaced:
+        return Response(json.dumps({"status": "no input"}), status_code=HTTP_200_OK)
+
+    sentimentReplaced = emojis.transform(urlsReplaced)
 
     watsonResp = await watson.getSentiment(sentimentCreate.content)
 
     messageSentiment = MessageSentiment(
         discord_id=sentimentCreate.discord_id,
-        content=sentimentCreate.content,
+        content=urlsReplaced,
         document_sentiment=watsonResp["sentiment"]["document"]["score"],
         document_sentiment_label=watsonResp["sentiment"]["document"]["label"],
         document_emotion_sadness=watsonResp["emotion"]["document"]["emotion"]["sadness"],
@@ -56,4 +62,4 @@ async def createSentiment(sentimentCreate: MessageSentimentCreate,
 
     insertMessageSentiment(db, messageSentiment)
 
-    print(watsonResp)
+    return Response(json.dumps({"status": "success"}), status_code=HTTP_200_OK)
